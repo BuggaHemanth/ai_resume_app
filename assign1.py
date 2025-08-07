@@ -10,7 +10,7 @@ from langchain_community.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings  
 from dotenv import load_dotenv
-
+from langchain_community.vectorstores import FAISS
 # %%
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -27,9 +27,6 @@ from bs4 import BeautifulSoup
 
 # %%
 import streamlit as st
-from chromadb import PersistentClient
-from chromadb.utils import embedding_functions
-
 # %%
 from dotenv import load_dotenv
 load_dotenv()
@@ -52,12 +49,8 @@ st.config.set_option('server.maxUploadSize', 6)
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 # Create or load Chroma vector store
-VECTOR_STORE_DIR = "chroma_store"
-if os.path.exists(VECTOR_STORE_DIR):
-    vectorstore = Chroma(persist_directory=VECTOR_STORE_DIR, embedding_function=embedding_model)
-else:
-    os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
-    vectorstore = Chroma(persist_directory=VECTOR_STORE_DIR, embedding_function=embedding_model)
+vectorstore = FAISS.from_documents(documents, embedding_model)
+
 
 # %%
 def scrape_job_posting(url):
@@ -357,5 +350,6 @@ Provide a brief, direct answer in 2-3 sentences."""
 
 if __name__ == "__main__":
     main()
+
 
 # %%
