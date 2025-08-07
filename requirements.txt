@@ -13,6 +13,6 @@ faiss-cpu
 pypdf
 python-docx
 docx2txt
-chromadb
 beautifulsoup4
 sentence-transformers
+
