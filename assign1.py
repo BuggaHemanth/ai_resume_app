@@ -159,7 +159,7 @@ def main():
     if 'vectorstore' in st.session_state:
         vectorstore = st.session_state.vectorstore
     
-    st.markdown("<h2 style='text-align: center; color: #1f4e79;'>🎯 AI-Powered Resume Screening System</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1f4e79;margin-top: -10px;'>🎯 AI-Powered Resume Screening System</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
     # Create 3 columns layout
@@ -289,7 +289,6 @@ Keep the response concise and focused on actionable feedback."""
 
                     # Store in FAISS
                     store_resume_analysis(analysis, uploaded_file.name)
-                    st.success("✅ Analysis stored successfully!")
 
     # Column 3: Q&A Section
     with col3:
@@ -297,7 +296,7 @@ Keep the response concise and focused on actionable feedback."""
         
         question = st.text_area(
             "Ask about analyzed resumes:",
-            height=100,
+            height=150,
             placeholder="e.g., What skills are missing?"
         )
         
@@ -335,14 +334,11 @@ Provide a brief, direct answer in 2-3 sentences."""
                         
                 except Exception as e:
                     st.error(f"Error retrieving data: {str(e)}")
-        
-        # Show chat history if available
-        if "analysis" in st.session_state:
-            st.markdown("---")
-            st.markdown("**Recent Analysis Available** ✅")
+
 
 if __name__ == "__main__":
     main()
 
 # %%
+
 
