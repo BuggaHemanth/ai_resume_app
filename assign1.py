@@ -22,6 +22,9 @@ logging.basicConfig(level=logging.DEBUG)
 load_dotenv()
 
 # Access the Google API key
+os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGCHAIN_API_KEY')
+os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGCHAIN_PROJECT')
+os.environ['LANGCHAIN_TRACING_V2'] = 'true'
 google_api_key = os.environ.get("GOOGLE_API_KEY")
 
 # %%
@@ -342,3 +345,4 @@ if __name__ == "__main__":
     main()
 
 # %%
+
