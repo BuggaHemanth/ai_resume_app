@@ -4,53 +4,39 @@ import streamlit as st
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import LLMChain
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
-from langchain_community.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings  
-from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
-# %%
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-import os, re, requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-import logging
-logging.basicConfig(level=logging.DEBUG)
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+import logging
+import re
 
 # %%
-import streamlit as st
-# %%
-from dotenv import load_dotenv
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Load environment variables
 load_dotenv()
 
 # Access the Google API key
 google_api_key = os.environ.get("GOOGLE_API_KEY")
 
-
 # %%
 # Set page config
-
 st.set_page_config(page_title="Resume Screening App", page_icon="📄", layout="wide")
 
 # Add this line to set file upload limit to 6MB
 st.config.set_option('server.maxUploadSize', 6)
 
-
 # %%
 # Setup embedding model
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-# Create or load Chroma vector store
-vectorstore = FAISS.from_documents(documents, embedding_model)
-
+# Initialize FAISS vectorstore as None (will be created when needed)
+vectorstore = None
 
 # %%
 def scrape_job_posting(url):
@@ -94,7 +80,7 @@ def scrape_job_posting(url):
 6. Nice to Have Skills
 
 Job Posting Text:
-{text[:4000]}  # Limit to avoid token limits
+{text[:4000]}
 
 Provide a clean, structured summary focusing only on the most relevant hiring criteria."""
         
@@ -137,11 +123,21 @@ def split_text(text):
     return splitter.create_documents([text])
 
 # %%
-# Store resume analysis in vector store
-def store_resume_analysis(resume_text, analysis, doc_id):
+# Store resume analysis in FAISS vector store
+def store_resume_analysis(analysis, doc_id):
+    global vectorstore
     documents = split_text(analysis)
-    vectorstore.add_documents(documents, ids=[f"{doc_id}_chunk_{i}" for i in range(len(documents))])
-    vectorstore.persist()
+    
+    # Create new FAISS vectorstore or add to existing one
+    if vectorstore is None:
+        vectorstore = FAISS.from_documents(documents, embedding_model)
+    else:
+        # Add documents to existing vectorstore
+        new_vectorstore = FAISS.from_documents(documents, embedding_model)
+        vectorstore.merge_from(new_vectorstore)
+    
+    # Store in session state for persistence during session
+    st.session_state.vectorstore = vectorstore
 
 # %%
 # Extract percentage score from analysis text
@@ -152,24 +148,19 @@ def extract_suitability_score(text):
     return None
 
 # %%
-# Initialize ChromaDB Persistent Client
-client = PersistentClient(path="./chromadb")
-collection_name = "my_collection"
-
-# Load or Create Collection
-if collection_name not in [c.name for c in client.list_collections()]:
-    collection = client.create_collection(collection_name)
-else:
-    collection = client.get_collection(collection_name)
-
-# %%
 # Main App
 def main():
+    global vectorstore
+    
+    # Load vectorstore from session state if available
+    if 'vectorstore' in st.session_state:
+        vectorstore = st.session_state.vectorstore
+    
     st.markdown("<h2 style='text-align: center; color: #1f4e79;'>🎯 AI-Powered Resume Screening System</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
     # Create 3 columns layout
-    col1, col2, col3 = st.columns([1, 1, 0.8],  gap='medium')
+    col1, col2, col3 = st.columns([1, 1, 0.8], gap='medium')
     
     # Column 1: Job Requirements
     with col1:
@@ -293,10 +284,8 @@ Keep the response concise and focused on actionable feedback."""
                     st.markdown("**📊 Analysis Results**")
                     st.markdown(analysis)
 
-                    # Store in ChromaDB
-                    chunks = [analysis[i:i+500] for i in range(0, len(analysis), 500)]
-                    ids = [f"{uploaded_file.name}_chunk_{i}" for i in range(len(chunks))]
-                    collection.add(documents=chunks, ids=ids)
+                    # Store in FAISS
+                    store_resume_analysis(analysis, uploaded_file.name)
                     st.success("✅ Analysis stored successfully!")
 
     # Column 3: Q&A Section
@@ -312,14 +301,15 @@ Keep the response concise and focused on actionable feedback."""
         if st.button("Get Answer", type="primary", use_container_width=True):
             if not question.strip():
                 st.warning("Please enter a question!")
+            elif vectorstore is None:
+                st.warning("No resume data found. Please analyze a resume first.")
             else:
-                # Retrieve relevant context from ChromaDB
                 try:
-                    results = collection.query(query_texts=[question], n_results=3)
+                    # Use FAISS similarity search
+                    docs = vectorstore.similarity_search(question, k=3)
+                    context = " ".join([doc.page_content for doc in docs])
                     
-                    if results['documents'] and results['documents'][0]:
-                        context = " ".join(results['documents'][0])
-                        
+                    if context.strip():
                         # Create Q&A prompt
                         qa_prompt = f"""Based on the resume analysis context below, answer this question concisely:
 
@@ -338,7 +328,7 @@ Provide a brief, direct answer in 2-3 sentences."""
                         answer = llm.invoke(qa_prompt).content
                         st.markdown(f"**Answer:** {answer}")
                     else:
-                        st.warning("No resume data found. Please analyze a resume first.")
+                        st.warning("No relevant information found. Please analyze a resume first.")
                         
                 except Exception as e:
                     st.error(f"Error retrieving data: {str(e)}")
@@ -350,6 +340,5 @@ Provide a brief, direct answer in 2-3 sentences."""
 
 if __name__ == "__main__":
     main()
-
 
 # %%
